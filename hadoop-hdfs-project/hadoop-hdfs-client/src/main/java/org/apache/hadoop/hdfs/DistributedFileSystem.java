@@ -186,7 +186,7 @@ public class DistributedFileSystem extends FileSystem
       throw new IOException("Incomplete HDFS URI, no host: "+ uri);
     }
 
-    this.dfs = new DFSClient(uri, conf, statistics);
+    initDFSClient(uri, conf);
     this.uri = URI.create(uri.getScheme()+"://"+uri.getAuthority());
     this.workingDir = getHomeDirectory();
 
@@ -198,6 +198,10 @@ public class DistributedFileSystem extends FileSystem
               return new DFSOpsCountStatistics();
             }
           });
+  }
+
+  void initDFSClient(URI theUri, Configuration conf) throws IOException {
+    this.dfs =  new DFSClient(theUri, conf, statistics);
   }
 
   @Override
@@ -1510,10 +1514,14 @@ public class DistributedFileSystem extends FileSystem
   @Override
   public void close() throws IOException {
     try {
-      dfs.closeOutputStreams(false);
+      if (dfs != null) {
+        dfs.closeOutputStreams(false);
+      }
       super.close();
     } finally {
-      dfs.close();
+      if (dfs != null) {
+        dfs.close();
+      }
     }
   }
 
@@ -2060,6 +2068,12 @@ public class DistributedFileSystem extends FileSystem
     new FileSystemLinkResolver<Void>() {
       @Override
       public Void doCall(final Path p) throws IOException {
+        String ssTrashRoot =
+            new Path(p, FileSystem.TRASH_PREFIX).toUri().getPath();
+        if (dfs.exists(ssTrashRoot)) {
+          throw new IOException("Found trash root under path " + p + ". "
+              + "Please remove or move the trash root and then try again.");
+        }
         dfs.disallowSnapshot(getPathName(p));
         return null;
       }

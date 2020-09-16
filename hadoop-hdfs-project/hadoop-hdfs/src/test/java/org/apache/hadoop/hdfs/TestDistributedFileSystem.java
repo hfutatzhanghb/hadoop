@@ -142,7 +142,7 @@ public class TestDistributedFileSystem {
   
   private boolean noXmlDefaults = false;
   
-  private HdfsConfiguration getTestConfiguration() {
+  HdfsConfiguration getTestConfiguration() {
     HdfsConfiguration conf;
     if (noXmlDefaults) {
       conf = new HdfsConfiguration(false);
@@ -813,7 +813,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testStatistics2() throws IOException, NoSuchAlgorithmException {
-    HdfsConfiguration conf = new HdfsConfiguration();
+    HdfsConfiguration conf = getTestConfiguration();
     conf.set(DFSConfigKeys.DFS_STORAGE_POLICY_SATISFIER_MODE_KEY,
         StoragePolicySatisfierMode.EXTERNAL.toString());
     File tmpDir = GenericTestUtils.getTestDir(UUID.randomUUID().toString());
@@ -1475,7 +1475,7 @@ public class TestDistributedFileSystem {
 
   @Test(timeout=60000)
   public void testFileCloseStatus() throws IOException {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
     DistributedFileSystem fs = cluster.getFileSystem();
     try {
@@ -1495,7 +1495,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testCreateWithStoragePolicy() throws Throwable {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
         .storageTypes(
             new StorageType[] {StorageType.DISK, StorageType.ARCHIVE,
@@ -1534,7 +1534,7 @@ public class TestDistributedFileSystem {
 
   @Test(timeout=60000)
   public void testListFiles() throws IOException {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
     
     try {
@@ -1557,7 +1557,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testListStatusOfSnapshotDirs() throws IOException {
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(new HdfsConfiguration())
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(getTestConfiguration())
         .build();
     try {
       DistributedFileSystem dfs = cluster.getFileSystem();
@@ -1577,7 +1577,7 @@ public class TestDistributedFileSystem {
   @Test(timeout=10000)
   public void testDFSClientPeerReadTimeout() throws IOException {
     final int timeout = 1000;
-    final Configuration conf = new HdfsConfiguration();
+    final Configuration conf = getTestConfiguration();
     conf.setInt(HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY, timeout);
 
     // only need cluster to create a dfs client to get a peer
@@ -1611,7 +1611,7 @@ public class TestDistributedFileSystem {
 
   @Test(timeout=60000)
   public void testGetServerDefaults() throws IOException {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
     try {
       cluster.waitActive();
@@ -1626,7 +1626,7 @@ public class TestDistributedFileSystem {
   @Test(timeout=10000)
   public void testDFSClientPeerWriteTimeout() throws IOException {
     final int timeout = 1000;
-    final Configuration conf = new HdfsConfiguration();
+    final Configuration conf = getTestConfiguration();
     conf.setInt(HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY, timeout);
 
     // only need cluster to create a dfs client to get a peer
@@ -1663,7 +1663,7 @@ public class TestDistributedFileSystem {
 
   @Test(timeout = 30000)
   public void testTotalDfsUsed() throws Exception {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     MiniDFSCluster cluster = null;
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
@@ -1850,7 +1850,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testSuperUserPrivilege() throws Exception {
-    HdfsConfiguration conf = new HdfsConfiguration();
+    HdfsConfiguration conf = getTestConfiguration();
     File tmpDir = GenericTestUtils.getTestDir(UUID.randomUUID().toString());
     final Path jksPath = new Path(tmpDir.toString(), "test.jks");
     conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH,
@@ -1903,7 +1903,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testListingStoragePolicyNonSuperUser() throws Exception {
-    HdfsConfiguration conf = new HdfsConfiguration();
+    HdfsConfiguration conf = getTestConfiguration();
     try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build()) {
       cluster.waitActive();
       final DistributedFileSystem dfs = cluster.getFileSystem();
@@ -2055,7 +2055,7 @@ public class TestDistributedFileSystem {
   @Test
   public void testStorageFavouredNodes()
       throws IOException, InterruptedException, TimeoutException {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
         .storageTypes(new StorageType[] {StorageType.SSD, StorageType.DISK})
         .numDataNodes(3).storagesPerDatanode(2).build()) {
@@ -2080,7 +2080,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testGetECTopologyResultForPolicies() throws Exception {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getTestConfiguration();
     try (MiniDFSCluster cluster = DFSTestUtil.setupCluster(conf, 9, 3, 0)) {
       DistributedFileSystem dfs = cluster.getFileSystem();
       dfs.enableErasureCodingPolicy("RS-6-3-1024k");
@@ -2111,7 +2111,7 @@ public class TestDistributedFileSystem {
 
   @Test
   public void testECCloseCommittedBlock() throws Exception {
-    HdfsConfiguration conf = new HdfsConfiguration();
+    HdfsConfiguration conf = getTestConfiguration();
     conf.setInt(DFS_NAMENODE_FILE_CLOSE_NUM_COMMITTED_ALLOWED_KEY, 1);
     try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
         .numDataNodes(3).build()) {
@@ -2172,9 +2172,19 @@ public class TestDistributedFileSystem {
       String testDirStr = testDir.toUri().getPath();
       assertTrue(trAfterAllowSnapshotStr.startsWith(testDirStr));
 
+      // test2Dir has the same prefix as testDir, but not snapshottable
+      Path test2Dir = new Path("/ssgtr/test12/");
+      Path file1path = new Path(test2Dir, "file-1");
+      trAfterAllowSnapshot = dfs.getTrashRoot(file1path);
+      trAfterAllowSnapshotStr = trAfterAllowSnapshot.toUri().getPath();
+      // The trash root should not be in the snapshot root
+      assertFalse(trAfterAllowSnapshotStr.startsWith(testDirStr));
+      assertTrue(trBeforeAllowSnapshotStr.startsWith(homeDirStr));
+
       // Cleanup
       dfs.disallowSnapshot(testDir);
       dfs.delete(testDir, true);
+      dfs.delete(test2Dir, true);
     } finally {
       if (cluster != null) {
         cluster.shutdown();
@@ -2259,6 +2269,7 @@ public class TestDistributedFileSystem {
       assertEquals(trashRootsAfter2.size() + 1, trashRootsAfter3.size());
 
       // Cleanup
+      dfs.delete(new Path(testDir, FileSystem.TRASH_PREFIX), true);
       dfs.disallowSnapshot(testDir);
       dfs.delete(testDir, true);
     } finally {
@@ -2313,6 +2324,7 @@ public class TestDistributedFileSystem {
       assertEquals(trashRoots, trashRootsAfter);
 
       // Cleanup
+      dfs.delete(new Path(testDir, FileSystem.TRASH_PREFIX), true);
       dfs.disallowSnapshot(testDir);
       dfs.delete(testDir, true);
     } finally {
@@ -2435,6 +2447,36 @@ public class TestDistributedFileSystem {
 
       // Cleanup
       dfs.disallowSnapshot(testDir);
+      dfs.delete(testDir, true);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testDisallowSnapshotShouldThrowWhenTrashRootExists()
+      throws Exception {
+    Configuration conf = getTestConfiguration();
+    MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    try {
+      DistributedFileSystem dfs = cluster.getFileSystem();
+      Path testDir = new Path("/disallowss/test1/");
+      Path file0path = new Path(testDir, "file-0");
+      dfs.create(file0path);
+      dfs.allowSnapshot(testDir);
+      // Create trash root manually
+      Path testDirTrashRoot = new Path(testDir, FileSystem.TRASH_PREFIX);
+      dfs.mkdirs(testDirTrashRoot);
+      // Try disallowing snapshot, should throw
+      LambdaTestUtils.intercept(IOException.class,
+          () -> dfs.disallowSnapshot(testDir));
+      // Remove the trash root and try again, should pass this time
+      dfs.delete(testDirTrashRoot, true);
+      dfs.disallowSnapshot(testDir);
+      // Cleanup
       dfs.delete(testDir, true);
     } finally {
       if (cluster != null) {

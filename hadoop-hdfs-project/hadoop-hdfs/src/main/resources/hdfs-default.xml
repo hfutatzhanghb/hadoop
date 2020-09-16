@@ -1236,6 +1236,14 @@
   restarts. Defaults to 10 minutes.</description>
 </property>
 
+  <property>
+    <name>dfs.client.write.recover.lease.on.close.exception</name>
+    <value>false</value>
+    <description>
+      Set to true to call recoverLease operation automatically when DFSOutputSteam closing encounters exception.
+    </description>
+  </property>
+
 <property>
   <name>dfs.namenode.checkpoint.dir</name>
   <value>file://${hadoop.tmp.dir}/dfs/namesecondary</value>
@@ -4182,6 +4190,15 @@
   <description>
     The number of bytes for the DFSClient will fetch from the Namenode
     during a read operation.  Defaults to 10 * ${dfs.blocksize}.
+  </description>
+</property>
+
+<property>
+  <name>dfs.client.read.uri.cache.enabled</name>
+  <value>false</value>
+  <description>
+    If true, dfs client will use cache when creating URI based on host:port
+    to reduce the frequency of URI object creation.
   </description>
 </property>
 
