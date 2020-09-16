@@ -191,6 +191,8 @@ public class StandbyCheckpointer {
     thread.interrupt();
   }
 
+  //doCheckpoint方法主要做了两件事：
+  //1.生成checkpoint文件。2.把生成的文件上传到Possible ANN上
   private void doCheckpoint() throws InterruptedException, IOException {
     assert canceler != null;
     final long txid;
@@ -198,24 +200,28 @@ public class StandbyCheckpointer {
     // Acquire cpLock to make sure no one is modifying the name system.
     // It does not need the full namesystem write lock, since the only thing
     // that modifies namesystem on standby node is edit log replaying.
-    namesystem.cpLockInterruptibly();
+    namesystem.cpLockInterruptibly(); //cpLock是checkpointLock的意思
     try {
       assert namesystem.getEditLog().isOpenForRead() :
         "Standby Checkpointer should only attempt a checkpoint when " +
         "NN is in standby mode, but the edit logs are in an unexpected state";
 
       FSImage img = namesystem.getFSImage();
-
+      //得到上一次做cp的txid
       long prevCheckpointTxId = img.getStorage().getMostRecentCheckpointTxId();
+      //得到本次cp操作的last txid
       long thisCheckpointTxId = img.getCorrectLastAppliedOrWrittenTxId();
+      //如果本次cp操作的txid小于上一次的txid，说明状态不对。
       assert thisCheckpointTxId >= prevCheckpointTxId;
+      //没有新的txid可以进行checkpoint，直接返回
       if (thisCheckpointTxId == prevCheckpointTxId) {
         LOG.info("A checkpoint was triggered but the Standby Node has not " +
             "received any transactions since the last checkpoint at txid {}. " +
             "Skipping...", thisCheckpointTxId);
         return;
       }
-
+      //如果是滚动升级并且还没有生成回滚的fsimage，那么把imageType设置为"fsimage_rollback"
+      //否则就是常规的镜像文件，设置imageType为"fsimage"
       if (namesystem.isRollingUpgrade()
           && !namesystem.getFSImage().hasRollbackFSImage()) {
         // if we will do rolling upgrade but have not created the rollback image
@@ -224,7 +230,9 @@ public class StandbyCheckpointer {
       } else {
         imageType = NameNodeFile.IMAGE;
       }
+      //保存FS image文件到所有配置的目录中
       img.saveNamespace(namesystem, imageType, canceler);
+      //记录最近cp的txid，判断是不是等于thisCheckpointTxId
       txid = img.getStorage().getMostRecentCheckpointTxId();
       assert txid == thisCheckpointTxId : "expected to save checkpoint at txid=" +
           thisCheckpointTxId + " but instead saved at txid=" + txid;
@@ -233,6 +241,7 @@ public class StandbyCheckpointer {
       String outputDir = checkpointConf.getLegacyOivImageDir();
       if (outputDir != null && !outputDir.isEmpty()) {
         try {
+          //保存Legacy oiv image
           img.saveLegacyOIVImage(namesystem, outputDir, canceler);
         } catch (IOException ioe) {
           LOG.warn("Exception encountered while saving legacy OIV image; "
@@ -240,9 +249,10 @@ public class StandbyCheckpointer {
         }
       }
     } finally {
+      //这里释放了cp lock
       namesystem.cpUnlock();
     }
-
+    //下面的代码开始把fsimage的checkpoint上传给active节点。
     // Upload the saved checkpoint back to the active
     // Do this in a separate thread to avoid blocking transition to active, but don't allow more
     // than the expected number of tasks to run or queue up
@@ -262,18 +272,24 @@ public class StandbyCheckpointer {
       assert checkpointReceivers.containsKey(addressString);
       CheckpointReceiverEntry receiverEntry =
           checkpointReceivers.get(addressString);
+      //上一次upload之后距离现在的时间
       long secsSinceLastUpload =
           TimeUnit.MILLISECONDS.toSeconds(
               monotonicNow() - receiverEntry.getLastUploadTime());
+      //判断是否应该进行上传操作。两个条件满足一个即可
+      //1.如果是Active NN的主上传节点。 2.超过了配置的时间间隔。
       boolean shouldUpload = receiverEntry.isPrimary() ||
           secsSinceLastUpload >= checkpointConf.getQuietPeriod();
       if (shouldUpload) {
+        //使用线程池submit一个Callable的任务，返回生成一个Future类型的对象，用于后面get上传结果
         Future<TransferFsImage.TransferResult> upload =
             executor.submit(new Callable<TransferFsImage.TransferResult>() {
               @Override
               public TransferFsImage.TransferResult call()
                   throws IOException, InterruptedException {
+
                 CheckpointFaultInjector.getInstance().duringUploadInProgess();
+                //uploadImageFromStorage是上传image checkpoint的关键方法。一会儿看
                 return TransferFsImage.uploadImageFromStorage(activeNNAddress,
                     conf, namesystem.getFSImage().getStorage(), imageType, txid,
                     canceler);
@@ -293,10 +309,12 @@ public class StandbyCheckpointer {
         //  are not the active NN?
         CheckpointReceiverEntry receiverEntry = checkpointReceivers.get(url);
         TransferFsImage.TransferResult uploadResult = upload.get();
+        //如果上传成功，更新receiverEntry里面的上次上传时间和isPrimary值。
         if (uploadResult == TransferFsImage.TransferResult.SUCCESS) {
           receiverEntry.setLastUploadTime(monotonicNow());
           receiverEntry.setIsPrimary(true);
         } else {
+          //上传失败一般有以下三个失败原因：
           // Getting here means image upload is explicitly rejected
           // by the other node. This could happen if:
           // 1. the other is also a standby, or
@@ -321,7 +339,7 @@ public class StandbyCheckpointer {
     // cleaner than copying code for multiple catch statements and better than catching all
     // exceptions, so we just handle the ones we expect.
     if (ie != null) {
-
+      //走到这里说明有InterruptedException异常，则取消剩下的task，并关闭线程池。
       // cancel the rest of the tasks, and close the pool
       for (Map.Entry<String, Future<TransferFsImage.TransferResult>> entry :
           uploads.entrySet()) {
@@ -425,6 +443,7 @@ public class StandbyCheckpointer {
       // Reset checkpoint time so that we don't always checkpoint
       // on startup.
       lastCheckpointTime = monotonicNow();
+      //shouldRun只有在停止standby服务时才会被设置为false
       while (shouldRun) {
         boolean needRollbackCheckpoint = namesystem.isNeedRollbackFsImage();
         if (!needRollbackCheckpoint) {
@@ -448,7 +467,7 @@ public class StandbyCheckpointer {
 
           // if we need a rollback checkpoint, always attempt to checkpoint
           boolean needCheckpoint = needRollbackCheckpoint;
-
+          //更新needCheckpoint变量的值（满足checkpoint时机才更新为true）
           if (needCheckpoint) {
             LOG.info("Triggering a rollback fsimage for rolling upgrade.");
           } else if (uncheckpointed >= checkpointConf.getTxnCount()) {
@@ -466,6 +485,8 @@ public class StandbyCheckpointer {
 
           if (needCheckpoint) {
             synchronized (cancelLock) {
+              //在要进行snn切换到ann时，会阻止checkpoint操作。
+              //preventCheckpointsUntil的值是在prepareToStopStandbyServices中调用方法设置的。
               if (now < preventCheckpointsUntil) {
                 LOG.info("But skipping this checkpoint since we are about to failover!");
                 canceledCount++;

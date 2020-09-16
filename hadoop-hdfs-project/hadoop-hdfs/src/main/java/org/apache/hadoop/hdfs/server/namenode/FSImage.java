@@ -1544,6 +1544,7 @@ public class FSImage implements Closeable {
    * This method must not be used for metrics.
    */
   public long getCorrectLastAppliedOrWrittenTxId() {
+    //TODO：这里的用max是什么意思？看fsimageload和editlog在读写时候是不是并发的。
     return Math.max(lastAppliedTxId,
         editLog != null ? editLog.getLastWrittenTxId() : 0);
   }

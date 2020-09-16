@@ -2732,10 +2732,12 @@ public class BlockManager implements BlockStatsMXBean {
       final DatanodeStorage storage,
       final BlockListAsLongs newReport,
       BlockReportContext context) throws IOException {
+    //处理块汇报是要加锁的，namesystem的写锁。
     namesystem.writeLock();
     final long startTime = Time.monotonicNow(); //after acquiring write lock
     final long endTime;
     DatanodeDescriptor node;
+    //记录要删除的blocks
     Collection<Block> invalidatedBlocks = Collections.emptyList();
     String strBlockReportId =
         context != null ? Long.toHexString(context.getReportId()) : "";
@@ -2768,7 +2770,7 @@ public class BlockManager implements BlockStatsMXBean {
         blockReportLeaseManager.removeLease(node);
         return !node.hasStaleStorages();
       }
-
+      //如果之前没收到过这个storage的块汇报信息，则调用processFirstBlockReport
       if (storageInfo.getBlockReportCount() == 0) {
         // The first block report can be processed a lot more efficiently than
         // ordinary block reports.  This shortens restart times.
@@ -2781,10 +2783,12 @@ public class BlockManager implements BlockStatsMXBean {
       } else {
         // Block reports for provided storage are not
         // maintained by DN heartbeats
+        //PROVIDED存储类型的块汇报不通过DN heartbeats维持，所以这里要判断不是PROVIDED才执行。
         if (!StorageType.PROVIDED.equals(storageInfo.getStorageType())) {
           invalidatedBlocks = processReport(storageInfo, newReport, context);
         }
       }
+      //更新storageInfo#blockReportCount，做了自增操作
       storageInfo.receivedBlockReport();
     } finally {
       endTime = Time.monotonicNow();
@@ -2873,7 +2877,8 @@ public class BlockManager implements BlockStatsMXBean {
           (Time.monotonicNow() - startTime), endSize, (startSize - endSize));
     }
   }
-  
+
+  //根据块汇报修改block-->datanode的映射关系。
   Collection<Block> processReport(
       final DatanodeStorageInfo storageInfo,
       final BlockListAsLongs report,
@@ -2883,7 +2888,9 @@ public class BlockManager implements BlockStatsMXBean {
     // between the old and new block report.
     //
     Collection<BlockInfoToAdd> toAdd = new ArrayList<>();
+    //用于存放将要从DatanodeDescriptor中删除的数据块
     Collection<BlockInfo> toRemove = new HashSet<>();
+    //用于存放将要从datanode中删除的数据块
     Collection<Block> toInvalidate = new ArrayList<>();
     Collection<BlockToMarkCorrupt> toCorrupt = new ArrayList<>();
     Collection<StatefulBlockInfo> toUC = new ArrayList<>();
@@ -2913,7 +2920,7 @@ public class BlockManager implements BlockStatsMXBean {
     } else {
       sortedReport = report;
     }
-
+    //关键方法，计算new和old的不同
     reportDiffSorted(storageInfo, sortedReport,
                      toAdd, toRemove, toInvalidate, toCorrupt, toUC);
 
@@ -3085,6 +3092,7 @@ public class BlockManager implements BlockStatsMXBean {
       if (BlockIdManager.isStripedBlockID(replicaID)
           && (!hasNonEcBlockUsingStripedID ||
               !blocksMap.containsBlock(replica))) {
+        //针对EC的块汇报
         replicaID = BlockIdManager.convertToStripedID(replicaID);
       }
 
@@ -3092,7 +3100,7 @@ public class BlockManager implements BlockStatsMXBean {
 
       LOG.debug("Reported block {} on {} size {} replicaState = {}",
           replica, dn, replica.getNumBytes(), reportedState);
-
+      //推迟处理数据块。假如到postpone队列里
       if (shouldPostponeBlocksFromFuture
           && isGenStampInFuture(replica)) {
         queueReportedBlock(storageInfo, replica, reportedState,
