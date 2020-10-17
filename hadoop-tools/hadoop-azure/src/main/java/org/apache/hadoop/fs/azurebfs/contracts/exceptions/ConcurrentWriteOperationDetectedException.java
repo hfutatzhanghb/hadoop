@@ -16,18 +16,17 @@
  * limitations under the License.
  */
 
+package org.apache.hadoop.fs.azurebfs.contracts.exceptions;
 
-#ifndef ORG_APACHE_HADOOP_IO_COMPRESS_SNAPPY_SNAPPY_H
-#define ORG_APACHE_HADOOP_IO_COMPRESS_SNAPPY_SNAPPY_H
+/**
+ * Thrown when a concurrent write operation is detected.
+ */
+@org.apache.hadoop.classification.InterfaceAudience.Public
+@org.apache.hadoop.classification.InterfaceStability.Evolving
+public class ConcurrentWriteOperationDetectedException
+    extends AzureBlobFileSystemException {
 
-#include "org_apache_hadoop.h"
-
-#ifdef UNIX
-#include <dlfcn.h>
-#endif
-
-#include <jni.h>
-#include <snappy-c.h>
-#include <stddef.h>
-
-#endif //ORG_APACHE_HADOOP_IO_COMPRESS_SNAPPY_SNAPPY_H
+  public ConcurrentWriteOperationDetectedException(String message) {
+    super(message);
+  }
+}
