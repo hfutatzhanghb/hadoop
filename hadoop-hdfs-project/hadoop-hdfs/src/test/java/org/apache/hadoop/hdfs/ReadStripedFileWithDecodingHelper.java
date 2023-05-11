@@ -66,6 +66,7 @@ abstract public class ReadStripedFileWithDecodingHelper {
   private static final int BLOCK_GROUP_SIZE = BLOCK_SIZE * NUM_DATA_UNITS;
 
   private static final int NUM_DATANODES = NUM_DATA_UNITS + NUM_PARITY_UNITS;
+  private static final int NUM_EXTRADATANODES = 3;
 
   protected static final int[] FILE_LENGTHS =
       {BLOCK_GROUP_SIZE - 123, BLOCK_GROUP_SIZE + 123};
@@ -73,11 +74,11 @@ abstract public class ReadStripedFileWithDecodingHelper {
   public static MiniDFSCluster initializeCluster() throws IOException {
     Configuration conf = new HdfsConfiguration();
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
-    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 0);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 2);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_STREAMS_HARD_LIMIT_KEY,
-        0);
+        2);
     MiniDFSCluster myCluster = new MiniDFSCluster.Builder(conf)
-        .numDataNodes(NUM_DATANODES)
+        .numDataNodes(NUM_DATANODES + NUM_EXTRADATANODES)
         .build();
     myCluster.getFileSystem().enableErasureCodingPolicy(
         StripedFileTestUtil.getDefaultECPolicy().getName());
@@ -97,6 +98,22 @@ abstract public class ReadStripedFileWithDecodingHelper {
       DistributedFileSystem dfs, Path file, long length) throws IOException {
     BlockLocation[] locs = dfs.getFileBlockLocations(file, 0, length);
     String name = (locs[0].getNames())[0];
+    int dnIndex = 0;
+    for (DataNode dn : cluster.getDataNodes()) {
+      int port = dn.getXferPort();
+      if (name.contains(Integer.toString(port))) {
+        return dnIndex;
+      }
+      dnIndex++;
+    }
+    return -1;
+  }
+
+  // the index begins from 1.
+  public static int findDataNodeAtIndex(MiniDFSCluster cluster,
+      DistributedFileSystem dfs, Path file, long length, int index) throws IOException {
+    BlockLocation[] locs = dfs.getFileBlockLocations(file, 0, length);
+    String name = (locs[0].getNames())[index - 1];
     int dnIndex = 0;
     for (DataNode dn : cluster.getDataNodes()) {
       int port = dn.getXferPort();
