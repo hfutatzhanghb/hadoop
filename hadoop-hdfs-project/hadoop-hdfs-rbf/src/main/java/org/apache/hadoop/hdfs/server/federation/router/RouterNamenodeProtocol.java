@@ -43,9 +43,9 @@ import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
 public class RouterNamenodeProtocol implements NamenodeProtocol {
 
   /** RPC server to receive client calls. */
-  private final RouterRpcServer rpcServer;
+  protected final RouterRpcServer rpcServer;
   /** RPC clients to connect to the Namenodes. */
-  private final RouterRpcClient rpcClient;
+  protected final RouterRpcClient rpcClient;
 
 
   public RouterNamenodeProtocol(RouterRpcServer server) {
