@@ -236,7 +236,7 @@ public class TestRouterRpc {
     // this issue, we disable considerLoad option.
     namenodeConf.setBoolean(DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY, false);
     namenodeConf.setBoolean(DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY, true);
-    cluster = new MiniRouterDFSCluster(false, NUM_SUBCLUSTERS);
+    cluster = new MiniRouterDFSCluster(true, NUM_SUBCLUSTERS);
     cluster.setNumDatanodesPerNameservice(NUM_DNS);
     cluster.addNamenodeOverrides(namenodeConf);
     cluster.setIndependentDNs();
@@ -255,12 +255,21 @@ public class TestRouterRpc {
     // Start NNs and DNs and wait until ready
     cluster.startCluster();
 
+    if (cluster.isHighAvailability()) {
+      for (String ns : cluster.getNameservices()) {
+        List<MiniRouterDFSCluster.NamenodeContext>  nnList = cluster.getNamenodes(ns);
+        cluster.switchToActive(ns, nnList.get(0).getNamenodeId());
+        cluster.switchToStandby(ns, nnList.get(1).getNamenodeId());
+      }
+    }
+
     cluster.addRouterOverrides(routerConf);
     cluster.startRouters();
 
     // Register and verify all NNs with all routers
     cluster.registerNamenodes();
     cluster.waitNamenodeRegistration();
+    cluster.waitActiveNamespaces();
 
     // We decrease the DN heartbeat expire interval to make them dead faster
     cluster.getCluster().getNamesystem(0).getBlockManager()

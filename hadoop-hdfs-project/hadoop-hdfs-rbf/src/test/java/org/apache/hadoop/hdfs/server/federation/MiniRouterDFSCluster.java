@@ -1154,14 +1154,19 @@ public class MiniRouterDFSCluster {
   public void deleteAllFiles() throws IOException {
     // Delete all files via the NNs and verify
     for (NamenodeContext context : getNamenodes()) {
-      FileSystem fs = context.getFileSystem();
-      FileStatus[] status = fs.listStatus(new Path("/"));
-      for (int i = 0; i <status.length; i++) {
-        Path p = status[i].getPath();
-        fs.delete(p, true);
+      LOG.info("BZL#Test. nn is {}", context.getNamenodeId());
+      try {
+        FileSystem fs = context.getFileSystem();
+        FileStatus[] status = fs.listStatus(new Path("/"));
+        for (int i = 0; i <status.length; i++) {
+          Path p = status[i].getPath();
+          fs.delete(p, true);
+        }
+        status = fs.listStatus(new Path("/"));
+        assertEquals(status.length, 0);
+      } catch (IOException e) {
+        LOG.error("BZL#Test. IOE ns.nn is {}.{}, e:{}", context.getNameserviceId(),context.getNamenodeId(), e.toString());
       }
-      status = fs.listStatus(new Path("/"));
-      assertEquals(status.length, 0);
     }
   }
 
